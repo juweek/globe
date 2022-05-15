@@ -3,15 +3,13 @@
   <title>Percent of COVID-19 cases shared via GISAID</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" type="text/css" href="css/main.css">
-
 </head>
 
 <body style="margin-top: 20px;">
-<div id="svganchor" class="graph centered">
-</div>
+<canvas id='rotatingGlobe' width='500' height='500' cursor: move;></canvas>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/6.1.1/d3.min.js"></script>
-<script src="https://unpkg.com/topojson-client@3"></script>
-<script src="https://unpkg.com/d3-tip@0.9.1/dist/index.js"></script>
+<script type='text/javascript' src='http://d3js.org/d3.v3.min.js'></script>
+<script type='text/javascript' src='http://d3js.org/topojson.v1.min.js'></script>
+<script type='text/javascript' src='js/planetaryjs.min.js'></script>
 <script src="js/main.js"></script>
 </body>

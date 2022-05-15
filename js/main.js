@@ -1,148 +1,115 @@
-/*
-------------------------------
-METHOD: set the size of the canvas
-------------------------------
-*/
-const width = 1300 // Chart width
-const height = 800 // Chart height
-const margin = {
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-}
+var globe = planetaryjs.planet();
+  // Load our custom `autorotate` plugin; see below.
+  globe.loadPlugin(autorotate(10));
+  // The `earth` plugin draws the oceans and the land; it's actually
+  // a combination of several separate built-in plugins.
+  //
+  // Note that we're loading a special TopoJSON file
+  // (world-110m-withlakes.json) so we can render lakes.
+  globe.loadPlugin(planetaryjs.plugins.earth({
+    topojson: { file:   'https://raw.githubusercontent.com/darul75/ng-planetaryjs/master/public/world-110m-withlakes.json' },
+    oceans:   { fill:   '#333' },
+    land:     { fill:   '#f2f1ed' },
+    borders:  { stroke: '#000' }
+  }));
+  // Load our custom `lakes` plugin to draw lakes; see below.
+  globe.loadPlugin(lakes({
+    fill: '#333'
+  }));
+  // The `pings` plugin draws animated pings on the globe.
+  globe.loadPlugin(planetaryjs.plugins.pings());
+  // The `zoom` and `drag` plugins enable
+  // manipulating the globe with the mouse.
+  globe.loadPlugin(planetaryjs.plugins.zoom({
+    scaleExtent: [100, 300]
+  }));
+  globe.loadPlugin(planetaryjs.plugins.drag({
+    // Dragging the globe should pause the
+    // automatic rotation until we release the mouse.
+    onDragStart: function() {
+      this.plugins.autorotate.pause();
+    },
+    onDragEnd: function() {
+      this.plugins.autorotate.resume();
+    }
+  }));
+  // Set up the globe's initial scale, offset, and rotation.
+  globe.projection.scale(175).translate([175, 175]).rotate([0, -10, 0]);
 
-//create a row of three HTML buttons 
+  // Every few hundred milliseconds, we'll draw another random ping.
+  var colors = ['red', 'yellow', 'white'];
+  setInterval(function() {
+    var lat = Math.random() * 170 - 85;
+    var lng = Math.random() * 360 - 180;
+    var color = colors[Math.floor(Math.random() * colors.length)];
+    globe.plugins.pings.add(lng, lat, { color: color, ttl: 3000, angle: Math.random() * 10 });
+  }, 150);
 
+  var canvas = document.getElementById('rotatingGlobe');
+  // Special code to handle high-density displays (e.g. retina, some phones)
+  // In the future, Planetary.js will handle this by itself (or via a plugin).
+  if (window.devicePixelRatio == 2) {
+    canvas.width = 800;
+    canvas.height = 800;
+    context = canvas.getContext('2d');
+    context.scale(2, 2);
+  }
+  // Draw that globe!
+  globe.draw(canvas);
 
-/*
-------------------------------
-METHOD: fetch the data and draw the chart 
-------------------------------
-*/
-function update(svg, us, radius) {
-	d3.csv('https://raw.githubusercontent.com/juweek/datasets/main/medicalState.csv').then(function(data) {
-		data.forEach(function(d) {
-			// extract only c_fips and per_capita (or total)
-			d.total = +d.avg_medical_debt;
-			d.per_capita = +d.avg_medical_debt
-			delete d['county'];
-			delete d['state'];
-			delete d['total'];
-			delete d['per_capita'];
-			delete d['pc_collections'];
-			delete d['state_name'];
-			// delete d['per_capita'];
-		});
-	
-		// transform data to Map of c_fips => per_capita
-		data = data.map(x => Object.values(x));
-		data = new Map(data);
+  // This plugin will automatically rotate the globe around its vertical
+  // axis a configured number of degrees every second.
+  function autorotate(degPerSec) {
+    // Planetary.js plugins are functions that take a `planet` instance
+    // as an argument...
+    return function(planet) {
+      var lastTick = null;
+      var paused = false;
+      planet.plugins.autorotate = {
+        pause:  function() { paused = true;  },
+        resume: function() { paused = false; }
+      };
+      // ...and configure hooks into certain pieces of its lifecycle.
+      planet.onDraw(function() {
+        if (paused || !lastTick) {
+          lastTick = new Date();
+        } else {
+          var now = new Date();
+          var delta = now - lastTick;
+          // This plugin uses the built-in projection (provided by D3)
+          // to rotate the globe each time we draw it.
+          var rotation = planet.projection.rotate();
+          rotation[0] += degPerSec * delta / 1000;
+          if (rotation[0] >= 180) rotation[0] -= 360;
+          planet.projection.rotate(rotation);
+          lastTick = now;
+        }
+      });
+    };
+  };
 
-		console.log(data)
-		
-		format = d3.format(",.7f");
-		// radius = d3.scaleSqrt([0, d3.quantile([...data.values()].sort(d3.ascending), 0.985)], [0, 10])
+  // This plugin takes lake data from the special
+  // TopoJSON we're loading and draws them on the map.
+  function lakes(options) {
+    options = options || {};
+    var lakes = null;
 
-		svg.select("g")
-			.selectAll("circle")
-			.data(topojson.feature(us, us.objects.states).features
-			.map(d => (d.value = data.get(d.id), d))
-			.sort((a, b) => b.value - a.value))
-		.join("circle")
-			.attr("transform", d => `translate(${path.centroid(d)})`)
-			.attr("r", d => radius(d.value));
-			//.attr("r", 5);
+    return function(planet) {
+      planet.onInit(function() {
+        // We can access the data loaded from the TopoJSON plugin
+        // on its namespace on `planet.plugins`. We're loading a custom
+        // TopoJSON file with an object called "ne_110m_lakes".
+        var world = planet.plugins.topojson.world;
+        lakes = topojson.feature(world, world.objects.ne_110m_lakes);
+      });
 
-		svg.select("g")
-			.selectAll("circle")
-			.append("title")
-			.text(d => `${d.properties.name}${format(d.value)}`);
-
-	});
-}
-
-
-/*
-------------------------------
-METHOD: load in the map
-------------------------------
-*/
-d3.json("https://raw.githubusercontent.com/xuanyoulim/fcc-internet-complaints-map/master/counties-albers-10m.json").then(function(us){
-	path = d3.geoPath();
-
-	const svg = d3.select("#svganchor").append("svg")
-					.attr("viewBox", [-10, 0, 975, 610]);
-
-
-	// outline us map
-	svg.append("path")
-		.datum(topojson.feature(us, us.objects.nation))
-		.attr("fill", "#ccc")
-		.attr("d", path);
-
-	// outline state border
-	svg.append("path")
-		.datum(topojson.mesh(us, us.objects.states, (a, b) => a !== b))
-		.attr("fill", "none")
-		.attr("stroke", "white")
-		.attr("stroke-linejoin", "round")
-		.attr("d", path);
-
-	// for circle
-	svg.append("g")
-		.attr("fill", "brown")
-		.attr("fill-opacity", 0.5)
-		.attr("stroke", "#fff")
-		.attr("stroke-width", 0.5)
-
-	radius = d3.scaleSqrt([450, 1100], [0, 45]);
-
-	const legend = svg.append("g")
-	.attr("fill", "#777")
-	.attr("transform", "translate(925,608)")
-	.attr("text-anchor", "middle")
-	.style("font", "10px sans-serif")
-  .selectAll("g")
-	.data([0.001, 0.005, 0.01])
-  .join("g");
-
-	legend.append("circle")
-	.attr("fill", "none")
-	.attr("stroke", "#ccc")
-	.attr("cy", d => -radius(d))
-	.attr("r", radius);
-
-	legend.append("text")
-	.attr("y", d => -2 * radius(d))
-	.attr("dy", "1.3em")
-	.text(d3.format(".4"));
-
-	// Create tooltip div and make it invisible
-	let tooltip = d3.select("#svganchor").append("div")
-	.attr("class", "tooltip")
-	.style("opacity", 0);
-
-	d3.selectAll("circle").on("mousemove", function(d) {
-		tooltip.html(`<strong>$${d.target.__data__.id}</strong><br>
-					  <strong>Population: </strong>${d.target.__data__.population}`)
-			.style('top', (d.pageY - 12) + 'px')
-			.style('left', (d.pageX + 25) + 'px')
-			.style("opacity", 0.9);
-
-		xLine.attr("x1", d3.select(this).attr("cx"))
-			.attr("y1", d3.select(this).attr("cy"))
-			.attr("y2", (height - margin.bottom))
-			.attr("x2",  d3.select(this).attr("cx"))
-			.attr("opacity", 1);
-
-	}).on("mouseout", function(_) {
-		tooltip.style("opacity", 0);
-		xLine.attr("opacity", 0);
-	});
-
-	update(svg, us, radius);
-})
-.catch(function(error){
-	console.log(error);
-});
+      planet.onDraw(function() {
+        planet.withSavedContext(function(context) {
+          context.beginPath();
+          planet.path.context(context)(lakes);
+          context.fillStyle = options.fill || 'black';
+          context.fill();
+        });
+      });
+    };
+  };
