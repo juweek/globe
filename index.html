@@ -6,10 +6,11 @@
 </head>
 
 <body style="margin-top: 20px;">
-<canvas id='rotatingGlobe' width='500' height='500' cursor: move;></canvas>
-
-<script type='text/javascript' src='http://d3js.org/d3.v3.min.js'></script>
-<script type='text/javascript' src='http://d3js.org/topojson.v1.min.js'></script>
-<script type='text/javascript' src='js/planetaryjs.min.js'></script>
-<script src="js/main.js"></script>
+  <div id="globeViz"></div>
 </body>
+<script src="https://unpkg.com/three@0.140.2/build/three.js"></script>
+<script src="https://unpkg.com/three@0.140.2/examples/js/controls/TrackballControls.js"></script>
+<script src="https://unpkg.com/three@0.140.2/examples/js/renderers/CSS2DRenderer.js"></script>
+<script src="https://unpkg.com/three-globe@2.24.4/dist/three-globe.min.js"></script>
+<script src="js/main.js"></script>
+

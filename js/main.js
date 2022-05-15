@@ -1,115 +1,74 @@
-var globe = planetaryjs.planet();
-  // Load our custom `autorotate` plugin; see below.
-  globe.loadPlugin(autorotate(10));
-  // The `earth` plugin draws the oceans and the land; it's actually
-  // a combination of several separate built-in plugins.
-  //
-  // Note that we're loading a special TopoJSON file
-  // (world-110m-withlakes.json) so we can render lakes.
-  globe.loadPlugin(planetaryjs.plugins.earth({
-    topojson: { file:   'https://raw.githubusercontent.com/darul75/ng-planetaryjs/master/public/world-110m-withlakes.json' },
-    oceans:   { fill:   '#333' },
-    land:     { fill:   '#f2f1ed' },
-    borders:  { stroke: '#000' }
-  }));
-  // Load our custom `lakes` plugin to draw lakes; see below.
-  globe.loadPlugin(lakes({
-    fill: '#333'
-  }));
-  // The `pings` plugin draws animated pings on the globe.
-  globe.loadPlugin(planetaryjs.plugins.pings());
-  // The `zoom` and `drag` plugins enable
-  // manipulating the globe with the mouse.
-  globe.loadPlugin(planetaryjs.plugins.zoom({
-    scaleExtent: [100, 300]
-  }));
-  globe.loadPlugin(planetaryjs.plugins.drag({
-    // Dragging the globe should pause the
-    // automatic rotation until we release the mouse.
-    onDragStart: function() {
-      this.plugins.autorotate.pause();
-    },
-    onDragEnd: function() {
-      this.plugins.autorotate.resume();
-    }
-  }));
-  // Set up the globe's initial scale, offset, and rotation.
-  globe.projection.scale(175).translate([175, 175]).rotate([0, -10, 0]);
+/*
+------------------------------
+Every Threejs code project needs three things: a scene, a camera, and a renderer. we render the scene with the camera and attach it to the dom
+------------------------------
+*/
+const markerSvg = `<svg viewBox="-4 0 36 36">
+      <path fill="currentColor" d="M14,0 C21.732,0 28,5.641 28,12.6 C28,23.963 14,36 14,36 C14,36 0,24.064 0,12.6 C0,5.641 6.268,0 14,0 Z"></path>
+      <circle fill="black" cx="14" cy="14" r="7"></circle>
+    </svg>`;
 
-  // Every few hundred milliseconds, we'll draw another random ping.
-  var colors = ['red', 'yellow', 'white'];
-  setInterval(function() {
-    var lat = Math.random() * 170 - 85;
-    var lng = Math.random() * 360 - 180;
-    var color = colors[Math.floor(Math.random() * colors.length)];
-    globe.plugins.pings.add(lng, lat, { color: color, ttl: 3000, angle: Math.random() * 10 });
-  }, 150);
+    // Gen random data for the markers on the globe
+    const N = 30;
+    const gData = [...Array(N).keys()].map(() => ({
+      lat: (Math.random() - 0.5) * 180,
+      lng: (Math.random() - 0.5) * 360,
+      size: 7 + Math.random() * 30,
+      color: ['red', 'white', 'blue', 'green'][Math.round(Math.random() * 3)]
+    }));
 
-  var canvas = document.getElementById('rotatingGlobe');
-  // Special code to handle high-density displays (e.g. retina, some phones)
-  // In the future, Planetary.js will handle this by itself (or via a plugin).
-  if (window.devicePixelRatio == 2) {
-    canvas.width = 800;
-    canvas.height = 800;
-    context = canvas.getContext('2d');
-    context.scale(2, 2);
-  }
-  // Draw that globe!
-  globe.draw(canvas);
-
-  // This plugin will automatically rotate the globe around its vertical
-  // axis a configured number of degrees every second.
-  function autorotate(degPerSec) {
-    // Planetary.js plugins are functions that take a `planet` instance
-    // as an argument...
-    return function(planet) {
-      var lastTick = null;
-      var paused = false;
-      planet.plugins.autorotate = {
-        pause:  function() { paused = true;  },
-        resume: function() { paused = false; }
-      };
-      // ...and configure hooks into certain pieces of its lifecycle.
-      planet.onDraw(function() {
-        if (paused || !lastTick) {
-          lastTick = new Date();
-        } else {
-          var now = new Date();
-          var delta = now - lastTick;
-          // This plugin uses the built-in projection (provided by D3)
-          // to rotate the globe each time we draw it.
-          var rotation = planet.projection.rotate();
-          rotation[0] += degPerSec * delta / 1000;
-          if (rotation[0] >= 180) rotation[0] -= 360;
-          planet.projection.rotate(rotation);
-          lastTick = now;
-        }
-      });
-    };
-  };
-
-  // This plugin takes lake data from the special
-  // TopoJSON we're loading and draws them on the map.
-  function lakes(options) {
-    options = options || {};
-    var lakes = null;
-
-    return function(planet) {
-      planet.onInit(function() {
-        // We can access the data loaded from the TopoJSON plugin
-        // on its namespace on `planet.plugins`. We're loading a custom
-        // TopoJSON file with an object called "ne_110m_lakes".
-        var world = planet.plugins.topojson.world;
-        lakes = topojson.feature(world, world.objects.ne_110m_lakes);
+    // load in the maps to apply to the geospatial data
+    const Globe = new ThreeGlobe()
+      .globeImageUrl('https://raw.githubusercontent.com/juweek/datasets/main/maps/earth-light.jpg')
+      .bumpImageUrl('https://unpkg.com/three-globe@2.24.4/example/img/earth-topology.png')
+      .htmlElementsData(gData)
+      .htmlElement(d => {
+        const el = document.createElement('div');
+        el.innerHTML = markerSvg;
+        el.style.color = d.color;
+        el.style.width = `${d.size}px`;
+        return el;
       });
 
-      planet.onDraw(function() {
-        planet.withSavedContext(function(context) {
-          context.beginPath();
-          planet.path.context(context)(lakes);
-          context.fillStyle = options.fill || 'black';
-          context.fill();
-        });
-      });
-    };
-  };
+    // Setup renderers
+    const renderers = [new THREE.WebGLRenderer(), new THREE.CSS2DRenderer()];
+    renderers.forEach((r, idx) => {
+      r.setSize(window.innerWidth, window.innerHeight);
+      if (idx > 0) {
+        // overlay additional on top of main renderer
+        r.domElement.style.position = 'absolute';
+        r.domElement.style.top = '0px';
+        r.domElement.style.pointerEvents = 'none';
+      }
+      document.getElementById('globeViz').appendChild(r.domElement);
+    });
+
+    // Setup scene
+    const scene = new THREE.Scene();
+    scene.add(Globe);
+    scene.add(new THREE.AmbientLight(0xbbbbbb));
+    scene.add(new THREE.DirectionalLight(0xffffff, 0.6));
+
+    // Setup camera
+    const camera = new THREE.PerspectiveCamera();
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    camera.position.z = 500;
+
+    // Add camera controls
+    const tbControls = new THREE.TrackballControls(camera, renderers[0].domElement);
+    tbControls.minDistance = 101;
+    tbControls.rotateSpeed = 5;
+    tbControls.zoomSpeed = 0.8;
+
+    // Update pov when camera moves
+    Globe.setPointOfView(camera.position, Globe.position);
+    tbControls.addEventListener('change', () => Globe.setPointOfView(camera.position, Globe.position));
+
+    // Kick-off renderers
+    (function animate() { // IIFE
+      // Frame cycle
+      tbControls.update();
+      renderers.forEach(r => r.render(scene, camera));
+      requestAnimationFrame(animate);
+    })();
