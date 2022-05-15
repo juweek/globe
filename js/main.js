@@ -12,6 +12,8 @@ const margin = {
   bottom: 0,
 }
 
+//create a row of three HTML buttons 
+
 
 /*
 ------------------------------
@@ -19,35 +21,38 @@ METHOD: fetch the data and draw the chart
 ------------------------------
 */
 function update(svg, us, radius) {
-	d3.csv('https://raw.githubusercontent.com/xuanyoulim/fcc-internet-complaints-map/master/csv/2015-12.csv').then(function(data) {
+	d3.csv('https://raw.githubusercontent.com/juweek/datasets/main/medicalState.csv').then(function(data) {
 		data.forEach(function(d) {
 			// extract only c_fips and per_capita (or total)
-			d.total = +d.total;
-			d.per_capita = +d.per_capita
+			d.total = +d.avg_medical_debt;
+			d.per_capita = +d.avg_medical_debt
 			delete d['county'];
 			delete d['state'];
 			delete d['total'];
+			delete d['per_capita'];
+			delete d['pc_collections'];
+			delete d['state_name'];
 			// delete d['per_capita'];
 		});
 	
 		// transform data to Map of c_fips => per_capita
 		data = data.map(x => Object.values(x));
 		data = new Map(data);
+
+		console.log(data)
 		
 		format = d3.format(",.7f");
 		// radius = d3.scaleSqrt([0, d3.quantile([...data.values()].sort(d3.ascending), 0.985)], [0, 10])
 
 		svg.select("g")
 			.selectAll("circle")
-			.data(topojson.feature(us, us.objects.counties).features
+			.data(topojson.feature(us, us.objects.states).features
 			.map(d => (d.value = data.get(d.id), d))
 			.sort((a, b) => b.value - a.value))
 		.join("circle")
-			.transition()
-			.duration(1000)
-			.ease(d3.easeLinear)
 			.attr("transform", d => `translate(${path.centroid(d)})`)
 			.attr("r", d => radius(d.value));
+			//.attr("r", 5);
 
 		svg.select("g")
 			.selectAll("circle")
@@ -68,6 +73,7 @@ d3.json("https://raw.githubusercontent.com/xuanyoulim/fcc-internet-complaints-ma
 
 	const svg = d3.select("#svganchor").append("svg")
 					.attr("viewBox", [-10, 0, 975, 610]);
+
 
 	// outline us map
 	svg.append("path")
@@ -90,7 +96,7 @@ d3.json("https://raw.githubusercontent.com/xuanyoulim/fcc-internet-complaints-ma
 		.attr("stroke", "#fff")
 		.attr("stroke-width", 0.5)
 
-	radius = d3.scaleSqrt([0, 0.001], [0, 15]);
+	radius = d3.scaleSqrt([450, 1100], [0, 45]);
 
 	const legend = svg.append("g")
 	.attr("fill", "#777")
@@ -111,6 +117,29 @@ d3.json("https://raw.githubusercontent.com/xuanyoulim/fcc-internet-complaints-ma
 	.attr("y", d => -2 * radius(d))
 	.attr("dy", "1.3em")
 	.text(d3.format(".4"));
+
+	// Create tooltip div and make it invisible
+	let tooltip = d3.select("#svganchor").append("div")
+	.attr("class", "tooltip")
+	.style("opacity", 0);
+
+	d3.selectAll("circle").on("mousemove", function(d) {
+		tooltip.html(`<strong>$${d.target.__data__.id}</strong><br>
+					  <strong>Population: </strong>${d.target.__data__.population}`)
+			.style('top', (d.pageY - 12) + 'px')
+			.style('left', (d.pageX + 25) + 'px')
+			.style("opacity", 0.9);
+
+		xLine.attr("x1", d3.select(this).attr("cx"))
+			.attr("y1", d3.select(this).attr("cy"))
+			.attr("y2", (height - margin.bottom))
+			.attr("x2",  d3.select(this).attr("cx"))
+			.attr("opacity", 1);
+
+	}).on("mouseout", function(_) {
+		tooltip.style("opacity", 0);
+		xLine.attr("opacity", 0);
+	});
 
 	update(svg, us, radius);
 })
